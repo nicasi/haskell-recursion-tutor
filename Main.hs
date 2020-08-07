@@ -9,6 +9,7 @@ import Text.Read hiding (step)
 import Text.RawString.QQ
 import Network.CGI
 import Task
+import Debug.Trace
 
 ------- EXERCISES EXPRESSIONS
 
@@ -16,7 +17,7 @@ expr1 = squares (cons (Con 3) (cons (square (Con 2)) nil))
 expr2 = add (square (add (square (Con 3)) (square (Con 5)))) (Con 4)
 expr3 = cons (square (Con 3)) (squares (cons (Con 3) (cons (Con 9) nil)))
 expr4 = squares (cons (Con 3) (cons (square (square(Con 2))) (cons (Con 4) nil)))
-expr5 = squares (cons (Con 5) (cons (Con 7) (cons (Con 3) nil)))
+expr5 = squares (cons (Con 3) (cons (Con 5) (cons (Con 7) (cons (Con 3) nil))))
 expr6 = squares (cons (Con 3) (cons (Con 9) nil))
 expr7 = squares (cons (add (Con 3) (add (Con 0) (Con 3))) (cons (add (add (Con 2) (Con 1)) (Con 3)) nil))
 expr8 = fib (Con 5)
@@ -81,7 +82,7 @@ wrap dropdown instr stepbuttons steps tables = [r|
    <html>
    <head>
       <title>Haskell Recursion Tutor</title>
-      <link rel='stylesheet' href='/css/style.css'>
+      <link rel='stylesheet' href='/css/haskell-recursion.css'>
    </head>
    <body>
       <h1>Recursion Steps in Haskell</h1>
@@ -171,8 +172,8 @@ insert :: (String, Expr, Expr, Expr) -> [Table'] -> [Table']
 insert (s,x,y,z) [] = [(s, [(x, y, z)])]
 insert (s,x,y,z) (t:ts)
    | s == fst t = if (x,y,z) `elem` snd t then (t:ts)
-                  else (s, (x,y,z):snd t) : ts
-   | otherwise  = t:insert (s,x,y,z) ts
+                  else (s, (x,y,z):snd t):ts
+   | otherwise  = (insert (s,x,y,z) ts) ++ [t]
 
 exprToTablesN :: Expr -> Int -> [Table']
 exprToTablesN e n = exprToTablesN' e n [] 
@@ -180,6 +181,8 @@ exprToTablesN e n = exprToTablesN' e n []
       exprToTablesN' :: Expr -> Int -> [Table'] -> [Table']
       exprToTablesN' _ 0 _  = []
       exprToTablesN' e n ts = insert (inOutStep e) (exprToTablesN' (step' e) (n-1) ts)
+
+
 
 normalizeTables :: [Table'] -> [Table']
 normalizeTables [] = []
