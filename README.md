@@ -8,3 +8,4 @@ Usage:
 - _**Rename the resulting file to "tutor"**_
 - Place the file _tutor_ in your cgi folder
 - Access as cgi script (e.g. http://localhost/cgi/tutor)
+- Place the css-file in a folder called css in the server's root
