@@ -3,6 +3,7 @@
 module Task
    where
 
+import Data.List
 import System.Environment
 import Text.Printf
 import Text.RawString.QQ
@@ -18,6 +19,8 @@ instance Show Expr where
 -- infixl 7 *
 
 ppExpr :: Int -> Expr -> String
+ppExpr n expr | Just ys <- collectList expr = 
+   "[" ++ intercalate ", " (map (ppExpr 0) ys) ++ "]"
 ppExpr n expr =
    case collect expr of
       (Con n, [])   -> show n
@@ -26,6 +29,14 @@ ppExpr n expr =
       (Var "*", [x, y])     -> parIf (n > 7) $ ppExpr 7 x ++ " * " ++ ppExpr 8 y
       (Var f, args)         -> parIf (n >= 10 && not (null args)) $ unwords (f : map (ppExpr 10) args)
       _ -> error "ppExpr: invalid expression"
+
+collectList :: Expr -> Maybe [Expr]
+collectList expr = 
+   case collect expr of
+      (Var "cons", [x, xs]) -> fmap (x:) (collectList xs)
+      (Var "[]", [])        -> Just []
+      _ -> Nothing
+
 
 collect :: Expr -> (Expr, [Expr])
 collect = rec []
@@ -39,8 +50,10 @@ parIf :: Bool -> String -> String
 parIf True  s = "(" ++ s ++ ")"
 parIf False s = s
 
+{--
 type Table = (String, [(Expr, Expr)])
 type Task = (Expr, [Table])
+--}
 
 bin :: String -> Expr -> Expr -> Expr
 bin s x y = App ( App ( Var s ) x ) y
@@ -61,10 +74,10 @@ squares :: Expr -> Expr
 squares e = App (Var "squares") e
 
 mult :: Expr -> Expr -> Expr
-mult x y = App (App (Var "*") x) y
+mult = bin "*"
 
 add :: Expr -> Expr -> Expr
-add x y = App (App (Var "+") x) y
+add = bin "+"
 
 --------------------------
 
@@ -107,6 +120,12 @@ stepsSub :: Expr -> [(Expr, Path)]
 stepsSub e =
    case step e of
       Just (e', p) -> (e, p) : stepsSub e'
+      Nothing      -> (e, []) : []
+
+stepsPath :: Expr -> [(Expr, Path)]
+stepsPath e =
+   case step e of
+      Just (e', p) -> (e, p) : stepsPath e'
       Nothing      -> (e, []) : []
 
 stepsSubN :: Expr -> Int -> [(Expr, Path)]
@@ -169,3 +188,10 @@ step (App f a) =
          case step a of
             Just (a', p) -> Just (App f a', R:p)
             Nothing -> Nothing
+
+step'' :: Expr -> Expr
+step'' (Con n) = Con n
+step'' (Var s) = Var s
+step'' (App (App (Var "+") (Con n)) (Con m)) = Con (n+m)
+step'' (App (App (Var "*") (Con n)) (Con m)) = Con (n*m)
+step'' (App f a) = App (step'' f) (step'' a)
