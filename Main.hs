@@ -3,6 +3,7 @@
 module Main
    where
 
+import Data.List hiding (insert)
 import System.Environment
 import Text.Printf
 import Text.Read hiding (step)
@@ -27,6 +28,9 @@ expr11 = square (mult (fib (mult (Con 2) (Con 2))) (fib (Con 2)))
 expr12 = App (Var "f") (Con 8)
 expr13 = App (Var "fac") (Con 5)
 expr14 = add (Con 3) (Con 21)
+expr15 = cons (square (Con 3)) (cons (square (Con 7)) (cons (Con 7) (cons (Con 3) nil)))
+expr16 = squares (cons (Con 7) (cons (Con 5) nil))
+
 
 instr =  [ (expr1, squaresInstr)
          , (expr2, squaresInstr)
@@ -36,6 +40,8 @@ instr =  [ (expr1, squaresInstr)
          , (expr6, squaresInstr)
          , (expr7, squaresInstr)
          , (expr8, fibInstr)
+         , (expr15, squaresInstr)
+         , (expr12, squaresInstr)
          ]
 
 len = length instr
@@ -85,7 +91,7 @@ wrap dropdown instr stepbuttons steps tables = [r|
       <link rel='stylesheet' href='/css/haskell-recursion.css'>
    </head>
    <body>
-      <h1>Recursion Steps in Haskell</h1>
+      <h1>Haskell Recursion Tutor</h1>
       <select id="dd">|] ++ dropdown ++ [r|</select>
       <script>
       document
@@ -107,6 +113,8 @@ wrap dropdown instr stepbuttons steps tables = [r|
 |]
 
 toHTML :: Int -> Maybe Path -> Maybe Path -> Expr -> String
+toHTML n p1 p2 expr | Just ys <- collectList expr = 
+   "[" ++ intercalate ", " (map (toHTML 10 p1 p2) ys) ++ "]"
 toHTML n p1 p2 expr =
    case collect expr of
       (Con n, [])   -> "<span" ++ tag (p1,p2) ++ ">" ++ show n  ++ "</span>" 
@@ -141,12 +149,14 @@ htmlStringsN expr n = ["<div>" ++ toHTML 0 (Just p1) (Just p2) e ++ "</div>" | (
 stepsHtml e = foldr (++) "" (htmlStrings e)
 stepsHtmlN e n = foldr (++) "" (htmlStringsN e n)
 
-inOutStep :: Expr -> (String, Expr, Expr, Expr)
-inOutStep e = case (e, step e) of
-   (_, Nothing) -> ("", Var "null", Var "null", Var "null") -- end rewriting
-   (e, Just (e', p)) -> case (isBin $  subexpr p e) of
-      False -> (fname $ subexpr p e, subexpr p e, subexpr p e', Var "null")
-      True -> (fname $ subexpr p e, getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e')
+
+inOutStep :: Expr -> Maybe (String, Expr, Expr, Expr)
+inOutStep e =
+   case (e, step e) of
+      (_, Nothing) -> Nothing
+      (e, Just (e', p)) -> case (isBin $ subexpr p e) of
+         False -> Just (fname $ subexpr p e, subexpr p e, subexpr p e', Var "null")
+         True -> Just (fname $ subexpr p e, getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e')
                
    where      
       getParam1 :: Expr -> Expr
@@ -158,33 +168,55 @@ inOutStep e = case (e, step e) of
       getParam2 (App (App f a) b) = b
       getParam2 _ = Var "null"
 
-fname :: Expr -> String
-fname (App f a) = case f of
-   (App f' a') -> case f' of 
-      (Var "+") -> "plus"
-      (Var "*") -> "multiply"
-      _         -> show f'
-   _           -> show f
+      fname :: Expr -> String
+      fname (App f a) = case f of
+         (App f' a') -> case f' of 
+            (Var "+") -> "plus"
+            (Var "*") -> "multiply"
+            _         -> show f'
+         _           -> show f
 
-type Table' = (String, [(Expr, Expr, Expr)])
+type Table = (String, [(Expr, Expr, Expr)])
 
-insert :: (String, Expr, Expr, Expr) -> [Table'] -> [Table']
-insert (s,x,y,z) [] = [(s, [(x, y, z)])]
-insert (s,x,y,z) (t:ts)
-   | s == fst t = if (x,y,z) `elem` snd t then (t:ts)
-                  else (s, (x,y,z):snd t):ts
-   | otherwise  = (insert (s,x,y,z) ts) ++ [t]
-
-exprToTablesN :: Expr -> Int -> [Table']
+{--
+exprToTablesN :: Expr -> Int -> [Table]
 exprToTablesN e n = exprToTablesN' e n [] 
+
+exprToTablesN' :: Expr -> Int -> [Table] -> [Table]
+exprToTablesN' e n ts
+   | n <= 0    = []
+   | otherwise = case (inOutStep e) of
+      Just x -> insert x (exprToTablesN' (step' e) (n-1) ts)
+      Nothing -> exprToTablesN' e (n-1) ts
+--}
+
+
+exprToTablesN :: Expr -> Int -> [Table]
+exprToTablesN e n = reverseTables $ exprToTablesN' (reverse $ inOutStepsN e n) []
    where
-      exprToTablesN' :: Expr -> Int -> [Table'] -> [Table']
-      exprToTablesN' _ 0 _  = []
-      exprToTablesN' e n ts = insert (inOutStep e) (exprToTablesN' (step' e) (n-1) ts)
+      reverseTables [] = []
+      reverseTables ((s,rows):ts) = (s, reverse rows):reverseTables ts
 
+      exprToTablesN' :: [(String, Expr, Expr, Expr)] -> [Table] -> [Table]
+      exprToTablesN' (r:rows) ts
+         | rows == [] = insert r ts
+         | otherwise  = insert r (exprToTablesN' rows ts)
 
+      inOutStepsN :: Expr -> Int -> [(String, Expr, Expr, Expr)]
+      inOutStepsN e n
+         | n <= 0    = []
+         | otherwise = case (inOutStep e) of
+            Just x -> x : inOutStepsN (step' e) (n-1)
+            Nothing -> []
 
-normalizeTables :: [Table'] -> [Table']
+      insert :: (String, Expr, Expr, Expr) -> [Table] -> [Table]
+      insert (s,x,y,z) [] = [(s, [(x, y, z)])]
+      insert (s,x,y,z) (t:ts)
+         | s == fst t = if (x,y,z) `elem` snd t then (t:ts)
+                        else (s, (x,y,z):snd t):ts
+         | otherwise  = t : (insert (s,x,y,z) ts)
+
+normalizeTables :: [Table] -> [Table]
 normalizeTables [] = []
 normalizeTables (t:ts) = normalizeTable t : normalizeTables ts
    where
@@ -195,7 +227,7 @@ normalizeTables (t:ts) = normalizeTable t : normalizeTables ts
                | e3 == Var "null" = (e1, eval e2, e3) : normalizeRows rs
                | otherwise        = (e1, eval e2, eval e3) : normalizeRows rs
 
-outTables' :: [Table'] -> String
+outTables' :: [Table] -> String
 outTables' [] = ""
 outTables' (t:ts) = outTable t ++ outTables' ts
    where
@@ -207,7 +239,9 @@ outTables' (t:ts) = outTable t ++ outTables' ts
       outRow ((e1,e2,e3):es) = "<tr><td>" ++ show e1 ++ "</td><td>" ++ show e2 ++ "</td><td>" ++ show e3 ++ "</td></tr>\n" ++ outRow es
 
 outTablesN :: Expr -> Int -> String
-outTablesN e n = outTables' $ exprToTablesN e n
+outTablesN e n
+   | n <= 0    = ""
+   | otherwise = outTables' $ exprToTablesN e n
 
 outStepButtons :: Int -> Int -> Int -> String
 outStepButtons page step maxStep
@@ -220,29 +254,49 @@ dropdown page = unwords ["<option " ++ (if(i==page) then "selected " else "") ++
 
 cgiMain = do pStr <- getInput "page"
              sStr <- getInput "step"
-             let p = case pStr of
+             let pageMaybe = case pStr of
                            Just _ -> readMaybe ((\(Just s) -> s) pStr) :: Maybe Int
                            Nothing -> Nothing 
-                 pageNr = case p of
+                 pageNr = case pageMaybe of
                         Just n -> n
                         Nothing -> 1
-                 i = max (min pageNr len) 1
-                 expr = fst $ instr !! (i-1)
-                 instructions = snd $ instr !! (i-1)
+                 pageToShow = max (min pageNr len) 1
+                 expr = fst $ instr !! (pageNr-1)
+                 instructions = snd $ instr !! (pageNr-1)
 
-                 s = case sStr of
+                 stepNr = case sStr of
                      Just _ -> readMaybe ((\(Just s) -> s) sStr) :: Maybe Int
                      Nothing -> Nothing
 
-                 stepNr = case s of
-                        Just n -> if n>1 then n else 1
-                        Nothing -> 1
+                 stepToShow = case stepNr of
+                     Just n -> if n>=1 then n else 1
+                     Nothing -> 1
                   
-             output $ wrap (dropdown i) instructions (outStepButtons i stepNr (length $ steps expr)) (stepsHtmlN expr (stepNr)) (outTablesN expr (stepNr-1))
+             output $ wrap (dropdown pageToShow) instructions (outStepButtons pageToShow stepToShow (length $ steps expr)) (stepsHtmlN expr (stepToShow)) (outTablesN expr (stepToShow-1))
 
 main = runCGI $ handleErrors cgiMain
 
+
+
 {--
+
+[
+   (
+      "squares",
+      [
+         (squares [7, 5],square 7 : squares [5],null),
+         (squares [5],square 5 : squares [],null),
+         (squares [],[],null)
+      ]
+   ),
+   (
+      "square",
+      [
+         (square 7,49,null),
+         (square 5,25,null)
+      ]
+   )
+]
 
 inOutStep :: Expr -> [String]
 inOutStep e = case (e, step e) of
@@ -310,5 +364,32 @@ render i =
        instructions = snd $ instr !! i'
        in
           do writeFile "front-end/index.html" $ wrap instructions (stepsHtml expr) (exprToJSON expr)
+
+inOutStep :: Expr -> (String, Expr, Expr, Expr)
+inOutStep e =
+   case (e, step e) of
+      (_, Nothing) -> ("", Var "null", Var "null", Var "null") -- end rewriting
+      (e, Just (e', p)) -> case (isBin $ subexpr p e) of
+         False -> (fname $ subexpr p e, subexpr p e, subexpr p e', Var "null")
+         True -> (fname $ subexpr p e, getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e')
+               
+   where      
+      getParam1 :: Expr -> Expr
+      getParam1 (App (App f a) b) = a
+      getParam1 (App f a) = a
+      getParam1 _ = Var "null"
+
+      getParam2 :: Expr -> Expr
+      getParam2 (App (App f a) b) = b
+      getParam2 _ = Var "null"
+
+      fname :: Expr -> String
+      fname (App f a) = case f of
+         (App f' a') -> case f' of 
+            (Var "+") -> "plus"
+            (Var "*") -> "multiply"
+            _         -> show f'
+         _           -> show f
+
 
 --}
