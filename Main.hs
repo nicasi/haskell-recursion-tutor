@@ -41,7 +41,7 @@ instr =  [ (expr1, squaresInstr)
          , (expr7, squaresInstr)
          , (expr8, fibInstr)
          , (expr15, squaresInstr)
-         , (expr12, squaresInstr)
+         , (expr12, fInstr)
          ]
 
 len = length instr
@@ -51,6 +51,7 @@ len = length instr
 squaresInstr = frmt squaresStr
 facInstr = frmt facStr
 fibInstr = frmt fibStr
+fInstr = frmt fStr
 
 frmt fnsStr = bStr ++ fnsStr ++ eStr
 
@@ -70,6 +71,11 @@ fibStr = [r|
     fib 0 = 0
     fib 1 = 1
     fib n = fib (n-1) + fib (n-2)
+|]
+
+fStr = [r|
+    f 1 = 1
+    f n = 4 * f (n/2) + 3
 |]
 
 bStr = [r|
@@ -150,13 +156,13 @@ stepsHtml e = foldr (++) "" (htmlStrings e)
 stepsHtmlN e n = foldr (++) "" (htmlStringsN e n)
 
 
-inOutStep :: Expr -> Maybe (String, Expr, Expr, Expr)
+inOutStep :: Expr -> Maybe (String, [Expr])
 inOutStep e =
    case (e, step e) of
       (_, Nothing) -> Nothing
       (e, Just (e', p)) -> case (isBin $ subexpr p e) of
-         False -> Just (fname $ subexpr p e, subexpr p e, subexpr p e', Var "null")
-         True -> Just (fname $ subexpr p e, getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e')
+         False -> Just (fname $ subexpr p e, [subexpr p e, subexpr p e'])
+         True -> Just (fname $ subexpr p e, [getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e'])
                
    where      
       getParam1 :: Expr -> Expr
@@ -177,6 +183,7 @@ inOutStep e =
          _           -> show f
 
 type Table = (String, [(Expr, Expr, Expr)])
+type Table' = (String, [[Expr]])
 
 {--
 exprToTablesN :: Expr -> Int -> [Table]
@@ -191,30 +198,30 @@ exprToTablesN' e n ts
 --}
 
 
-exprToTablesN :: Expr -> Int -> [Table]
+exprToTablesN :: Expr -> Int -> [Table']
 exprToTablesN e n = reverseTables $ exprToTablesN' (reverse $ inOutStepsN e n) []
    where
       reverseTables [] = []
       reverseTables ((s,rows):ts) = (s, reverse rows):reverseTables ts
 
-      exprToTablesN' :: [(String, Expr, Expr, Expr)] -> [Table] -> [Table]
+      exprToTablesN' :: [(String, [Expr])] -> [Table'] -> [Table']
       exprToTablesN' (r:rows) ts
          | rows == [] = insert r ts
          | otherwise  = insert r (exprToTablesN' rows ts)
 
-      inOutStepsN :: Expr -> Int -> [(String, Expr, Expr, Expr)]
+      inOutStepsN :: Expr -> Int -> [(String, [Expr])]
       inOutStepsN e n
          | n <= 0    = []
          | otherwise = case (inOutStep e) of
             Just x -> x : inOutStepsN (step' e) (n-1)
             Nothing -> []
 
-      insert :: (String, Expr, Expr, Expr) -> [Table] -> [Table]
-      insert (s,x,y,z) [] = [(s, [(x, y, z)])]
-      insert (s,x,y,z) (t:ts)
-         | s == fst t = if (x,y,z) `elem` snd t then (t:ts)
-                        else (s, (x,y,z):snd t):ts
-         | otherwise  = t : (insert (s,x,y,z) ts)
+      insert :: (String, [Expr]) -> [Table'] -> [Table']
+      insert (s,exprs) [] = [(s, [exprs])]
+      insert (s,exprs) (t:ts)
+         | s == fst t = if exprs `elem` snd t then (t:ts)
+                        else (s, exprs:snd t):ts
+         | otherwise  = t : (insert (s,exprs) ts)
 
 normalizeTables :: [Table] -> [Table]
 normalizeTables [] = []
@@ -227,16 +234,19 @@ normalizeTables (t:ts) = normalizeTable t : normalizeTables ts
                | e3 == Var "null" = (e1, eval e2, e3) : normalizeRows rs
                | otherwise        = (e1, eval e2, eval e3) : normalizeRows rs
 
-outTables' :: [Table] -> String
+outTables' :: [Table'] -> String
 outTables' [] = ""
 outTables' (t:ts) = outTable t ++ outTables' ts
    where
       outTable ("", _) = ""
-      outTable (s, es) = "<table><thead><th colspan=2>"++s++"</th></thead>\n" ++ outRow es ++"</table>"
+      outTable (s, exprs@(x:xs)) = "<table><thead><th colspan=" ++ (show $ length exprs) ++ ">"++s++"</th></thead>\n" ++ outRow exprs ++ "</table>"
 
       outRow [] = ""
-      outRow ((e1,e2,Var "null"):es) = "<tr><td>" ++ show e1 ++ "</td><td>" ++ show e2 ++ "</td></tr>\n" ++ outRow es
-      outRow ((e1,e2,e3):es) = "<tr><td>" ++ show e1 ++ "</td><td>" ++ show e2 ++ "</td><td>" ++ show e3 ++ "</td></tr>\n" ++ outRow es
+      outRow (e:es) = "<tr>" ++ wrapTds e ++ "</tr>\n" ++ outRow es
+
+      wrapTds exprs = "<td>" ++ (intercalate "</td><td>" (map (show) exprs)) ++ "</td>"
+
+
 
 outTablesN :: Expr -> Int -> String
 outTablesN e n
