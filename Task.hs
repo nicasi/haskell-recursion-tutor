@@ -195,3 +195,4 @@ step'' (Var s) = Var s
 step'' (App (App (Var "+") (Con n)) (Con m)) = Con (n+m)
 step'' (App (App (Var "*") (Con n)) (Con m)) = Con (n*m)
 step'' (App f a) = App (step'' f) (step'' a)
+

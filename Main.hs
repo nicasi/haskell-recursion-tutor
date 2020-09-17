@@ -24,13 +24,19 @@ expr7 = squares (cons (add (Con 3) (add (Con 0) (Con 3))) (cons (add (add (Con 2
 expr8 = fib (Con 5)
 expr9 = add (fib (square (Con 2))) (fib (Con 2))
 expr10 = mult (fib (square (Con 2))) (fib (Con 2))
-expr11 = square (mult (fib (mult (Con 2) (Con 2))) (fib (Con 2)))
 expr12 = App (Var "f") (Con 8)
 expr13 = App (Var "fac") (Con 5)
 expr14 = add (Con 3) (Con 21)
 expr15 = cons (square (Con 3)) (cons (square (Con 7)) (cons (Con 7) (cons (Con 3) nil)))
-expr16 = squares (cons (Con 7) (cons (Con 5) nil))
-
+expr16 =
+   squares 
+      (cons
+         (Con 7)
+         (cons
+            (Con 5)
+            nil
+         )
+      )
 
 instr =  [ (expr1, squaresInstr)
          , (expr2, squaresInstr)
@@ -41,7 +47,9 @@ instr =  [ (expr1, squaresInstr)
          , (expr7, squaresInstr)
          , (expr8, fibInstr)
          , (expr15, squaresInstr)
+         , (expr16, squaresInstr)
          , (expr12, fInstr)
+         , (expr13, facInstr)
          ]
 
 len = length instr
@@ -88,8 +96,8 @@ eStr = [r|
     <p>View the rewrite steps below:</p>
 |]
 
-wrap :: String -> String -> String -> String -> String -> String
-wrap dropdown instr stepbuttons steps tables = [r|
+wrap :: String -> String -> String -> String -> String -> String -> String
+wrap dropdown instr stepbuttons counter steps tables = [r|
    <!doctype html>
    <html>
    <head>
@@ -97,8 +105,11 @@ wrap dropdown instr stepbuttons steps tables = [r|
       <link rel='stylesheet' href='/css/haskell-recursion.css'>
    </head>
    <body>
-      <h1>Haskell Recursion Tutor</h1>
-      <select id="dd">|] ++ dropdown ++ [r|</select>
+      <div class="card flex">
+         <h1>Haskell Recursion Tutor</h1>
+         <p>Choose an exercise:</p>
+         <select id="dd">|] ++ dropdown ++ [r|</select>
+      </div>
       <script>
       document
             .getElementById("dd")
@@ -106,13 +117,16 @@ wrap dropdown instr stepbuttons steps tables = [r|
                 window.location.href = this.value;
             })
       </script>
-      <div id='instructions'>|] ++ instr ++ [r|</div>
-      <div id='stepbuttons'>|] ++ stepbuttons ++ [r|</div>
-      <div id='steps-tables'>
-         <div id='exercise'>
-            <div id='steps'>|] ++ steps ++ [r|</div>
+      <div class=card>
+         <div id='instructions'>|] ++ instr ++ [r|</div>
+         <div id='stepbuttons'>|] ++ stepbuttons ++ [r|</div>
+         <div id='counter'>|] ++ counter ++ [r|</div>
+         <div id='steps-tables'>
+            <div id='exercise'>
+               <div id='steps'>|] ++ steps ++ [r|</div>
+            </div>
+            <div id='tables'>|] ++ tables ++ [r| </div>
          </div>
-         <div id='tables'>|] ++ tables ++ [r| </div>
       </div>
    </body>
 </html>
@@ -159,10 +173,10 @@ stepsHtmlN e n = foldr (++) "" (htmlStringsN e n)
 inOutStep :: Expr -> Maybe (String, [Expr])
 inOutStep e =
    case (e, step e) of
-      (_, Nothing) -> Nothing
-      (e, Just (e', p)) -> case (isBin $ subexpr p e) of
-         False -> Just (fname $ subexpr p e, [subexpr p e, subexpr p e'])
-         True -> Just (fname $ subexpr p e, [getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e'])
+      (e, Just (e', p))
+         | isBin (subexpr p e) -> Just (fname $ subexpr p e, [getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e'])
+         | otherwise           -> Just (fname $ subexpr p e, [subexpr p e, subexpr p e'])
+      _ -> Nothing
                
    where      
       getParam1 :: Expr -> Expr
@@ -177,81 +191,141 @@ inOutStep e =
       fname :: Expr -> String
       fname (App f a) = case f of
          (App f' a') -> case f' of 
-            (Var "+") -> "plus"
+            (Var "+") -> "add"
             (Var "*") -> "multiply"
             _         -> show f'
          _           -> show f
 
-type Table = (String, [(Expr, Expr, Expr)])
-type Table' = (String, [[Expr]])
-
-{--
-exprToTablesN :: Expr -> Int -> [Table]
-exprToTablesN e n = exprToTablesN' e n [] 
-
-exprToTablesN' :: Expr -> Int -> [Table] -> [Table]
-exprToTablesN' e n ts
+inOutSteps :: Expr -> Int -> [(String, [Expr])]
+inOutSteps e n
    | n <= 0    = []
    | otherwise = case (inOutStep e) of
-      Just x -> insert x (exprToTablesN' (step' e) (n-1) ts)
-      Nothing -> exprToTablesN' e (n-1) ts
+      Just x -> inOutSteps (step' e) (n-1) ++ [x]
+      Nothing -> []
+
+inOutStepsAll :: Expr -> [(String, [Expr])]
+inOutStepsAll e =
+   case (inOutStep e) of
+      Just x -> inOutStepsAll (step' e) ++ [x]
+      Nothing -> []
+
+type Table = (String, [[Expr]])
+
+{--
+exprToTables :: Expr -> Int -> [Table]
+exprToTables e n = exprToTables' e n [] 
+
+exprToTables' :: Expr -> Int -> [Table] -> [Table]
+exprToTables' e n ts
+   | n <= 0    = []
+   | otherwise = case (inOutStep e) of
+      Just x -> insert x (exprToTables' (step' e) (n-1) ts)
+      Nothing -> exprToTables' e (n-1) ts
 --}
 
+exprToTables :: Expr -> Int -> [Table]
+exprToTables e n = reverseRows $ exprToTables' (inOutSteps e n) []
 
-exprToTablesN :: Expr -> Int -> [Table']
-exprToTablesN e n = reverseTables $ exprToTablesN' (reverse $ inOutStepsN e n) []
+exprToTablesAll :: Expr -> [Table]
+exprToTablesAll e = reverseRows $ exprToTables' (inOutStepsAll e) []
+
+exprToTables' :: [(String, [Expr])] -> [Table] -> [Table]
+exprToTables' (r:rows) ts
+   | rows == [] = insert r ts
+   | otherwise  = insert r (exprToTables' rows ts)
+
+reverseRows :: [Table] -> [Table]
+reverseRows [] = []
+reverseRows ((s,rows):ts) = (s, reverse rows):reverseRows ts
+
+insert :: (String, [Expr]) -> [Table] -> [Table]
+insert (s,exprs) [] = [(s, [exprs])]
+insert (s,exprs) (t:ts)
+   | s == fst t = if exprs `elem` snd t then (t:ts)
+                  else (s, exprs:snd t):ts
+   | otherwise  = t : (insert (s,exprs) ts)
+
+rowsToNormalize :: [Table] -> Int
+rowsToNormalize []     = 0
+rowsToNormalize (t:ts) = rowsToNormalize' t + rowsToNormalize ts
    where
-      reverseTables [] = []
-      reverseTables ((s,rows):ts) = (s, reverse rows):reverseTables ts
+      rowsToNormalize' (_, [])   = 0
+      rowsToNormalize' (s, (exprs:rows)) = (eToNormalize exprs) + (rowsToNormalize' (s,rows))
 
-      exprToTablesN' :: [(String, [Expr])] -> [Table'] -> [Table']
-      exprToTablesN' (r:rows) ts
-         | rows == [] = insert r ts
-         | otherwise  = insert r (exprToTablesN' rows ts)
+      eToNormalize exprs
+         | (eval $ last exprs) == (last exprs) = 0
+         | otherwise                           = 1
 
-      inOutStepsN :: Expr -> Int -> [(String, [Expr])]
-      inOutStepsN e n
-         | n <= 0    = []
-         | otherwise = case (inOutStep e) of
-            Just x -> x : inOutStepsN (step' e) (n-1)
-            Nothing -> []
-
-      insert :: (String, [Expr]) -> [Table'] -> [Table']
-      insert (s,exprs) [] = [(s, [exprs])]
-      insert (s,exprs) (t:ts)
-         | s == fst t = if exprs `elem` snd t then (t:ts)
-                        else (s, exprs:snd t):ts
-         | otherwise  = t : (insert (s,exprs) ts)
-
-normalizeTables :: [Table] -> [Table]
-normalizeTables [] = []
-normalizeTables (t:ts) = normalizeTable t : normalizeTables ts
+normalizeStep :: [Table] -> [Table]
+normalizeStep [] = []
+normalizeStep ((s,rows):ts) 
+   | tableNormalized (s, rows) = (s,rows) : normalizeStep ts
+   | otherwise                 = (s, normalizeLastRow rows) : normalizeStep ts
+   
    where
-      normalizeTable (s, rs) = (s, normalizeRows rs)
-         where
-            normalizeRows [] = []
-            normalizeRows ((e1, e2, e3):rs)
-               | e3 == Var "null" = (e1, eval e2, e3) : normalizeRows rs
-               | otherwise        = (e1, eval e2, eval e3) : normalizeRows rs
+      normalizeLastRow rows
+         | rowNormalized (last rows) = normalizeLastRow (init rows) ++ [(last rows)]
+         | otherwise                 = (init rows) ++ [(evalLast $ last rows)]
 
-outTables' :: [Table'] -> String
+      evalLast exprs = (init exprs) ++ [(eval $ last exprs)]
+
+normalizeRowPos :: Table -> Int
+normalizeRowPos (_, []) = -1
+normalizeRowPos t@(s, rows)
+   | tableNormalized t = -1
+   | otherwise         = sum $ map fromEnum [ rowNormalized row | row <- rows ]
+
+normalizeTablePos :: [Table] -> Int
+normalizeTablePos [] = -1
+normalizeTablePos (t:ts)
+   | ts == []          = if tableNormalized t then -1 else 0
+   | tableNormalized t = 1 + normalizeTablePos ts
+   | otherwise         = 0
+
+normalizePos :: [Table] -> [Int]
+normalizePos = map normalizeRowPos
+
+rowNormalized row = last row == (eval $ last row)
+
+tableNormalized :: Table -> Bool
+tableNormalized t = rowsToNormalize [t] == 0
+
+-- TODO: merge functions
+
+outTables' :: [Table] -> String
 outTables' [] = ""
-outTables' (t:ts) = outTable t ++ outTables' ts
+outTables' tbls@(t:ts) = outTable t ++ outTables' ts
    where
       outTable ("", _) = ""
-      outTable (s, exprs@(x:xs)) = "<table><thead><th colspan=" ++ (show $ length exprs) ++ ">"++s++"</th></thead>\n" ++ outRow exprs ++ "</table>"
+      outTable (s, exprs) = "<table><thead><th colspan=10>"++s++"</th></thead>\n" ++ outRow exprs ++ "</table>"
 
       outRow [] = ""
-      outRow (e:es) = "<tr>" ++ wrapTds e ++ "</tr>\n" ++ outRow es
+      outRow (elist:elists) = "<tr>" ++ td elist ++ "</tr>\n" ++ outRow elists
 
-      wrapTds exprs = "<td>" ++ (intercalate "</td><td>" (map (show) exprs)) ++ "</td>"
+      td es = concat $ map (\e -> "<td>" ++ show e ++ "</td>") es
 
+outTables'' :: [Table] -> Int -> Int -> String
+outTables'' [] _ _ = ""
+outTables'' tbls@(t:ts) n m
+   | n == 0    = outTable t m ++ outTables'' ts n m
+   | otherwise = outTables'' (normalizeStep tbls) (n-1) m
+   where
+      outTable ("", _) m = ""
+      outTable t@(s, exprs) m = "<table><thead><th colspan=10>"++s++"</th></thead>\n" ++ outRow exprs (rowsToNormalize [t]) ++ "</table>"
+      
+      outRow [] _ = ""
+      outRow (elist:elists) m = if (m<=0) then "<tr class=rewrite>" ++ td elist ++ "</tr>\n" ++ outRow elists (m-1)
+                                else "<tr>" ++ td elist ++ "</tr>\n" ++ outRow elists (m-1)
+      
+      td es = concat $ map (\e -> "<td>" ++ show e ++ "</td>") es
 
+outTables :: Expr -> Int -> String
+outTables e n
+   | n <= 0     = ""
+   | n >= (length $ steps e) = outTables'' (exprToTables e n) m m
+   | otherwise  = outTables' (exprToTables e n)
+      where m = (n - (length $ steps e)+1)
 
-outTablesN :: Expr -> Int -> String
-outTablesN e n
-   | n <= 0    = ""
-   | otherwise = outTables' $ exprToTablesN e n
 
 outStepButtons :: Int -> Int -> Int -> String
 outStepButtons page step maxStep
@@ -261,6 +335,9 @@ outStepButtons page step maxStep
 
 dropdown :: Int -> String
 dropdown page = unwords ["<option " ++ (if(i==page) then "selected " else "") ++"value='tutor?page=" ++ show i ++ "'>" ++ (show $ fst $ instr !! (i-1)) ++ " </option>" | i <- [1.. len]]
+
+counter :: Int -> Int -> String
+counter n m = "<div>" ++ show n ++ "/" ++ show m ++ "</div>"
 
 cgiMain = do pStr <- getInput "page"
              sStr <- getInput "step"
@@ -282,13 +359,42 @@ cgiMain = do pStr <- getInput "page"
                      Just n -> if n>=1 then n else 1
                      Nothing -> 1
                   
-             output $ wrap (dropdown pageToShow) instructions (outStepButtons pageToShow stepToShow (length $ steps expr)) (stepsHtmlN expr (stepToShow)) (outTablesN expr (stepToShow-1))
+             output $ wrap
+                        (dropdown pageToShow)
+                        instructions
+                        (outStepButtons pageToShow stepToShow ((length $ steps expr) + (rowsToNormalize $ exprToTablesAll expr)))
+                        (counter stepToShow ((length $ steps expr) + (rowsToNormalize $ exprToTablesAll expr)))
+                        (stepsHtmlN expr (stepToShow))
+                        (outTables expr (stepToShow-1))
+
+                        --
 
 main = runCGI $ handleErrors cgiMain
 
 
 
 {--
+
+normalizeTables :: [Table] -> Int -> [Table]
+normalizeTables [] _ = []
+
+normalizeTables (t:ts) n
+   | n <= 0    = []
+   | otherwise = normalizeTable t : normalizeTables ts (n-1)
+      where
+         normalizeTable (s, rs) = (s, normalizeRows rs)
+
+         normalizeRows [] = []
+         normalizeRows (elist:elists) = map eval elist : normalizeRows elists
+
+normalizeTables' :: [Table'] -> Int -> [Table']
+normalizeTables' [] = []
+normalizeTables' (t:ts) = normalizeTable t : normalizeTables' ts
+   where
+      normalizeTable (s, rs) = (s, normalizeRows rs)
+
+      normalizeRows [] = []
+      normalizeRows (elist:elists) = map eval elist : normalizeRows elists
 
 [
    (
