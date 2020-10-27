@@ -9,7 +9,8 @@ import Text.Printf
 import Text.Read hiding (step)
 import Text.RawString.QQ
 import Network.CGI
-import Task
+import qualified Task as T (length, sum)
+import Task hiding (length, sum)
 import Debug.Trace
 
 ------- EXERCISES EXPRESSIONS
@@ -38,16 +39,13 @@ expr16 =
          )
       )
 
-instr =  [ (expr1, squaresInstr)
-         , (expr2, squaresInstr)
-         , (expr3, squaresInstr)
-         , (expr4, squaresInstr)
+expr17 = T.length (cons (Con 3) (cons (Con 5) (cons (Con 7) (cons (Con 3) nil))))
+expr18 = T.sum (cons (Con 3) (cons (Con 5) (cons (Con 7) (cons (Con 3) nil))))
+
+instr =  [ (expr17, lengthInstr)
+         , (expr18, sumListInstr)
          , (expr5, squaresInstr)
-         , (expr6, squaresInstr)
-         , (expr7, squaresInstr)
          , (expr8, fibInstr)
-         , (expr15, squaresInstr)
-         , (expr16, squaresInstr)
          , (expr12, fInstr)
          , (expr13, facInstr)
          ]
@@ -56,6 +54,8 @@ len = length instr
 
 ------- INSTRUCTIONS
 
+lengthInstr = frmt lengthStr
+sumListInstr = frmt sumlistStr
 squaresInstr = frmt squaresStr
 facInstr = frmt facStr
 fibInstr = frmt fibStr
@@ -83,7 +83,17 @@ fibStr = [r|
 
 fStr = [r|
     f 1 = 1
-    f n = 4 * f (n/2) + 3
+    f n = 4 * f (n `div` 2) + 3
+|]
+
+lengthStr = [r|
+    length []     = 0
+    length (x:xs) = 1 + length xs
+|]
+
+sumlistStr = [r|
+    sum []     = 0
+    sum (x:xs) = x + sum xs
 |]
 
 bStr = [r|
@@ -173,10 +183,8 @@ stepsHtmlN e n = foldr (++) "" (htmlStringsN e n)
 inOutStep :: Expr -> Maybe (String, [Expr])
 inOutStep e =
    case (e, step e) of
-      (e, Just (e', p))
-         | isBin (subexpr p e) -> Just (fname $ subexpr p e, [getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e'])
-         | otherwise           -> Just (fname $ subexpr p e, [subexpr p e, subexpr p e'])
-      _ -> Nothing
+      (e, Just (e', p)) -> Just (fname $ subexpr p e, [subexpr p e, subexpr p e']) -- [getParam1 $ subexpr p e, getParam2 $ subexpr p e, subexpr p e']
+      _                 -> Nothing
                
    where      
       getParam1 :: Expr -> Expr
@@ -290,7 +298,8 @@ rowNormalized row = last row == (eval $ last row)
 tableNormalized :: Table -> Bool
 tableNormalized t = rowsToNormalize [t] == 0
 
--- TODO: merge functions
+
+-- TODO: merge functions outTables' and outTables''
 
 outTables' :: [Table] -> String
 outTables' [] = ""
@@ -321,26 +330,31 @@ outTables'' tbls@(t:ts) n m
 
 outTables :: Expr -> Int -> String
 outTables e n
-   | n <= 0     = ""
+   | n <= 0                  = ""
    | n >= (length $ steps e) = outTables'' (exprToTables e n) m m
-   | otherwise  = outTables' (exprToTables e n)
+   | otherwise               = outTables'  (exprToTables e n)
       where m = (n - (length $ steps e)+1)
 
 
-outStepButtons :: Int -> Int -> Int -> String
-outStepButtons page step maxStep
-   | step<=1       = "<a>&larr;</a><a href='tutor?page=" ++ show page ++ "&step=2'>&rarr;</a>"
-   | step>=maxStep = "<a href='tutor?page=" ++ show page ++ "&step=" ++ show (step-1) ++ "'>&larr;</a><a>&rarr;</a>"
-   | otherwise     = "<a href='tutor?page=" ++ show page ++ "&step=" ++ show (step-1) ++ "'>&larr;</a><a href='tutor?page=" ++ show page ++ "&step=" ++ show (step+1) ++ "'>&rarr;</a>"
+outStepButtons :: String -> Int -> Int -> Int -> String
+outStepButtons scriptName page step maxStep
+   | step<=1       = "<a>&larr;</a><a href='" ++ scriptName ++ "?page=" ++ show page ++ "&step=2'>&rarr;</a>"
+   | step>=maxStep = "<a href='" ++ scriptName ++ "?page=" ++ show page ++ "&step=" ++ show (step-1) ++ "'>&larr;</a><a>&rarr;</a>"
+   | otherwise     = "<a href='" ++ scriptName ++ "?page=" ++ show page ++ "&step=" ++ show (step-1) ++ "'>&larr;</a><a href='" ++ scriptName ++ "?page=" ++ show page ++ "&step=" ++ show (step+1) ++ "'>&rarr;</a>"
 
 dropdown :: Int -> String
 dropdown page = unwords ["<option " ++ (if(i==page) then "selected " else "") ++"value='tutor?page=" ++ show i ++ "'>" ++ (show $ fst $ instr !! (i-1)) ++ " </option>" | i <- [1.. len]]
 
-counter :: Int -> Int -> String
-counter n m = "<div>" ++ show n ++ "/" ++ show m ++ "</div>"
+counter :: Int -> Int -> Int -> String
+counter current totRewriteSteps totNormSteps = "<div>" ++ show current ++ "/" ++ show (totRewriteSteps + totNormSteps) ++ "</div>" ++ msg
+   where
+      msg
+         | current > totRewriteSteps = "<div class='message'>Evaluation done. Green arrows indicate data passed back through passive flow.</div>"
+         | otherwise                 = ""
 
 cgiMain = do pStr <- getInput "page"
              sStr <- getInput "step"
+             scriptN <- scriptName
              let pageMaybe = case pStr of
                            Just _ -> readMaybe ((\(Just s) -> s) pStr) :: Maybe Int
                            Nothing -> Nothing 
@@ -362,8 +376,8 @@ cgiMain = do pStr <- getInput "page"
              output $ wrap
                         (dropdown pageToShow)
                         instructions
-                        (outStepButtons pageToShow stepToShow ((length $ steps expr) + (rowsToNormalize $ exprToTablesAll expr)))
-                        (counter stepToShow ((length $ steps expr) + (rowsToNormalize $ exprToTablesAll expr)))
+                        (outStepButtons scriptN pageToShow stepToShow ((length $ steps expr) + (rowsToNormalize $ exprToTablesAll expr)))
+                        (counter stepToShow (length $ steps expr) (rowsToNormalize $ exprToTablesAll expr))
                         (stepsHtmlN expr (stepToShow))
                         (outTables expr (stepToShow-1))
 

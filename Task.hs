@@ -64,6 +64,12 @@ cons = bin "cons"
 nil :: Expr
 nil = Var "[]"
 
+length :: Expr -> Expr
+length e = App (Var "length") e
+
+sum :: Expr -> Expr
+sum e = App (Var "sum") e
+
 fib :: Expr -> Expr
 fib e = App (Var "fib") e
 
@@ -169,6 +175,10 @@ step (Con _) = Nothing
 step (Var _) = Nothing
 step (App (App (Var "*") (Con n)) (Con m)) = Just (Con (n*m), [])
 step (App (App (Var "+") (Con n)) (Con m)) = Just (Con (n+m), [])
+step (App (Var "length") (Var "[]")) = Just (Con 0, [])
+step (App (Var "length") (App (App (Var "cons") x) xs)) = Just (add (Con 1) (Task.length xs), [])
+step (App (Var "sum") (Var "[]")) = Just (Con 0, [])
+step (App (Var "sum") (App (App (Var "cons") (Con n)) xs)) = Just (add (Con n) (Task.sum xs), [])
 step (App (Var "fac") (Con 1)) = Just (Con 1, [])
 step (App (Var "fac") (Con n)) = Just (mult (Con (n)) (App (Var "fac") (Con (n-1))), [])
 step (App (Var "fib") (Con 0)) = Just (Con 0, [])

@@ -179,6 +179,13 @@ h2 {
     /* animation: target 3s forwards linear; */
 }
 
+input {
+    font-size: 18px;
+    padding: 4px;
+    border: 3px solid lightgreen;
+    font-family: inconsolata;
+}
+
 /* #steps span:hover {
     background-color: rgba(0, 255, 255, 0.164);
     cursor: pointer;
