@@ -342,8 +342,8 @@ outStepButtons scriptName page step maxStep
    | step>=maxStep = "<a href='" ++ scriptName ++ "?page=" ++ show page ++ "&step=" ++ show (step-1) ++ "'>&larr;</a><a>&rarr;</a>"
    | otherwise     = "<a href='" ++ scriptName ++ "?page=" ++ show page ++ "&step=" ++ show (step-1) ++ "'>&larr;</a><a href='" ++ scriptName ++ "?page=" ++ show page ++ "&step=" ++ show (step+1) ++ "'>&rarr;</a>"
 
-dropdown :: Int -> String
-dropdown page = unwords ["<option " ++ (if(i==page) then "selected " else "") ++"value='tutor?page=" ++ show i ++ "'>" ++ (show $ fst $ instr !! (i-1)) ++ " </option>" | i <- [1.. len]]
+dropdown :: Int -> String -> String
+dropdown page scriptname = unwords ["<option " ++ (if(i==page) then "selected " else "") ++"value='" ++ scriptname ++ "?page=" ++ show i ++ "'>" ++ (show $ fst $ instr !! (i-1)) ++ " </option>" | i <- [1.. len]]
 
 counter :: Int -> Int -> Int -> String
 counter current totRewriteSteps totNormSteps = "<div>" ++ show current ++ "/" ++ show (totRewriteSteps + totNormSteps) ++ "</div>" ++ msg
@@ -374,7 +374,7 @@ cgiMain = do pStr <- getInput "page"
                      Nothing -> 1
                   
              output $ wrap
-                        (dropdown pageToShow)
+                        (dropdown pageToShow scriptN)
                         instructions
                         (outStepButtons scriptN pageToShow stepToShow ((length $ steps expr) + (rowsToNormalize $ exprToTablesAll expr)))
                         (counter stepToShow (length $ steps expr) (rowsToNormalize $ exprToTablesAll expr))
