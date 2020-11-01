@@ -1,7 +1,10 @@
 # haskell-recursion-tutor
 
 Dependencies:
-raw-strings-qq >=1, cgi >=3000, base >=4.8 && <4.9
+raw-strings-qq >=1, cgi >=3000, base >=4.8
+
+Note:
+Not tested with base > 4.12
 
 Usage:
 - Compile with ghc
