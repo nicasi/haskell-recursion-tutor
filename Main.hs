@@ -349,7 +349,7 @@ counter :: Int -> Int -> Int -> String
 counter current totRewriteSteps totNormSteps = "<div>" ++ show current ++ "/" ++ show (totRewriteSteps + totNormSteps) ++ "</div>" ++ msg
    where
       msg
-         | current > totRewriteSteps = "<div class='message'>Evaluation done. Green arrows indicate data passed back through passive flow.</div>"
+         | current > totRewriteSteps = "<div class='message'>Evaluation done. Green arrows indicate data passed back through the passive flow.</div>"
          | otherwise                 = ""
 
 cgiMain = do pStr <- getInput "page"
